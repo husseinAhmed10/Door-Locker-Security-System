@@ -1,0 +1,54 @@
+20:34:54 **** Incremental Build of configuration Debug for project MC1 ****
+make all 
+Building file: ../main_MC1.c
+Invoking: AVR Compiler
+avr-gcc -Wall -g2 -gstabs -O0 -fpack-struct -fshort-enums -ffunction-sections -fdata-sections -std=gnu99 -funsigned-char -funsigned-bitfields -mmcu=atmega32 -DF_CPU=8000000UL -MMD -MP -MF"main_MC1.d" -MT"main_MC1.o" -c -o "main_MC1.o" "../main_MC1.c"
+In file included from ../main_MC1.c:9:
+c:/winavr-20100110/lib/gcc/../../avr/include/util/delay.h:90:3: warning: #warning "Compiler optimizations disabled; functions from <util/delay.h> won't work as designed"
+../main_MC1.c: In function 'main':
+../main_MC1.c:74: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:77: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c: In function 'createPassword':
+../main_MC1.c:130: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:161: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:163: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c: In function 'sendpassword':
+../main_MC1.c:227: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:235: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c: In function 'Enter_pass':
+../main_MC1.c:246: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:251: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:307: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c: In function 'Door':
+../main_MC1.c:332: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:338: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+../main_MC1.c:344: warning: pointer targets in passing argument 1 of 'LCD_displayString' differ in signedness
+Finished building: ../main_MC1.c
+ 
+Building target: MC1.elf
+Invoking: AVR C Linker
+avr-gcc -Wl,-Map,MC1.map -mmcu=atmega32 -o "MC1.elf"  ./Timer1.o ./gpio.o ./keypad.o ./lcd.o ./main_MC1.o ./uart.o   
+Finished building target: MC1.elf
+ 
+Invoking: AVR Create Extended Listing
+avr-objdump -h -S MC1.elf  >"MC1.lss"
+Finished building: MC1.lss
+ 
+Invoking: Print Size
+avr-size --format=avr --mcu=atmega32 MC1.elf
+AVR Memory Usage
+----------------
+Device: atmega32
+
+Program:   13168 bytes (40.2% Full)
+(.text + .data + .bootloader)
+
+Data:        209 bytes (10.2% Full)
+(.data + .bss + .noinit)
+
+
+Finished building: sizedummy
+ 
+
+20:34:55 Build Finished. 0 errors, 14 warnings. (took 630ms)
+

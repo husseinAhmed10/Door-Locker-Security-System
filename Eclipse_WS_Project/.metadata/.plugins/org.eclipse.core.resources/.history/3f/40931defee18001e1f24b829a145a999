@@ -1,0 +1,260 @@
+/*
+ * main_MC2.c
+ *
+ *  Created on: Jul 1, 2023
+ *      Author: T.S
+ */
+
+#include "uart.h"
+#include "twi.h"
+#include "external_eeprom.h"
+#include "DCmotor.h"
+#include "Timer1.h"
+#include "buzzer.h"
+#include <util/delay.h>
+#include <avr/io.h>
+
+#define HMI_MC1_READY_UART			0x00
+#define CONTROL_MC2_READY_UART		0xFF
+#define PASSWORD_MATCH			TRUE
+#define PASSWORD_UNMATCH		FALSE
+#define CHANGING_PASSWORD 3
+
+#define password_length 5
+
+uint8 matching = 0;
+uint8 g_wrongPasswordCounter = 0;
+
+Timer1_ConfigType g_timer1_config = { 0, 7813, CLK_PRESCALER_1024, COMPARE_MODE };
+uint8 g_ticks;
+void Timer_CallBackFunction(void) {
+	g_ticks++;
+}
+
+uint8 password[password_length + 2];
+uint8 confirm[password_length + 2];
+
+uint8 saved_pass[password_length + 2];
+
+uint8 ReceivePassword();
+
+uint8 compare_password_confirmation(uint8 *password, uint8 *confirm);
+void Save_password_eeprom(uint8 *password);
+void read_password_eeprom(uint8 *password);
+
+void Door(void);
+
+void Buzzer_Alarm(void);
+void check_password_entered(uint8 *entered_pass);
+
+int main(void) {
+
+	uint8 receivedbyte;
+	uint8 entered_pass[password_length + 2];
+
+	SREG |= (1 << 7);
+	UART_configType configPtr = { 9600, NO_Parity, One_Stop_Bit, Data_8_Bits };
+	UART_init(&configPtr);
+
+	TWI_ConfigType config = { 0x02, (0x1) };
+	TWI_init(&config);
+
+	DcMotor_Init();
+	Buzzer_init();
+
+//	DcMotor_Rotate(1, 100);
+//	_delay_ms(2000);
+
+	do {
+		receivedbyte = ReceivePassword();
+	} while (receivedbyte == 0);
+
+	while (1) {
+
+		/*Send Ready byte to HMI_ECU to start sending password string*/
+		UART_sendByte(CONTROL_MC2_READY_UART);
+		receivedbyte = UART_recieveByte();
+
+		if (receivedbyte == '+') {
+
+			do {
+				UART_sendByte(CONTROL_MC2_READY_UART);
+
+				UART_receiveString(entered_pass);
+
+				check_password_entered(entered_pass);
+			} while (matching == 0);
+			check_password_entered(entered_pass);
+			Door();
+		} else if (receivedbyte == '-') {
+			do {
+				UART_sendByte(CONTROL_MC2_READY_UART);
+
+				UART_receiveString(entered_pass);
+
+				check_password_entered(entered_pass);
+			} while (matching == 0);
+			check_password_entered(entered_pass);
+			do {
+				receivedbyte = ReceivePassword();
+			} while (receivedbyte == 0);
+		}
+
+	}
+
+	return 0;
+}
+
+uint8 ReceivePassword() {
+
+	/*1->clock , 2->anti*/
+
+	uint8 receiveByte;
+
+	/*Send Ready byte to HMI_ECU to start sending password string*/
+	UART_sendByte(CONTROL_MC2_READY_UART);
+
+	UART_receiveString(password);
+
+	UART_sendByte(CONTROL_MC2_READY_UART);
+
+	UART_receiveString(confirm);
+
+	matching = compare_password_confirmation(password, confirm);
+
+	/*****************************Send Confirmation***********************************/
+	/*Wait for HMI_ECU to be ready*/
+
+	receiveByte = UART_recieveByte();
+
+	if (matching) {
+		UART_sendByte(PASSWORD_MATCH);
+		//Control_StorePasswordInEEPROM(password_first);
+		Save_password_eeprom(password);
+		return 1;
+
+	}
+
+	else {
+		UART_sendByte(PASSWORD_UNMATCH);
+		//Control_CompareAndStorePassword();
+		return 0;
+	}
+
+}
+
+uint8 compare_password_confirmation(uint8 *password, uint8 *confirm) {
+
+	while (matching != 1) {
+
+		for (uint8 i = 0; i < 5; i++) {
+
+			if (password[i] == confirm[i]) {
+				if (i == 4) {
+					//UART_sendByte(CONTROL_MC2_READY_UART);
+					//UART_sendByte(PASSWORD_MATCH);
+					//matching = 1;
+					return 1;
+				}
+
+				continue;
+			} else {
+				//UART_sendByte(CONTROL_MC2_READY_UART);
+				//UART_sendByte(PASSWORD_UNMATCH);
+				//break;
+				return 0;
+			}
+
+		}
+
+	}
+
+}
+
+void Save_password_eeprom(uint8 *password) {
+
+	for (uint8 i = 0; i < password_length; i++) {
+		/*The stored address is 0x00 */
+		EEPROM_writeByte((0x00) + i, *(password + i));
+		_delay_ms(100);
+	}
+
+}
+
+void read_password_eeprom(uint8 *password) {
+
+	for (uint8 i = 0; i < password_length; i++) {
+		/*The stored address is 0x00 */
+		EEPROM_readByte((0x00) + i, *(password + i));
+		_delay_ms(100);
+	}
+
+}
+
+void Door(void) {
+	Timer1_init(&g_timer1_config);
+	Timer1_setCallBack(&Timer_CallBackFunction);
+
+	g_ticks = 0;
+	DcMotor_Rotate(1, 100);
+	while (g_ticks < 15)
+		;
+
+	g_ticks = 0;
+	DcMotor_Rotate(0, 100);
+	while (g_ticks < 3)
+		;
+
+	g_ticks = 0;
+	DcMotor_Rotate(2, 100);
+	while (g_ticks < 15)
+		;
+
+	DcMotor_Rotate(0, 100);
+	Timer1_deInit();
+}
+
+void Buzzer_Alarm(void) {
+	Timer1_init(&g_timer1_config);
+	Timer1_setCallBack(&Timer_CallBackFunction);
+
+	Buzzer_on();
+
+	g_ticks = 0;
+	while (g_ticks < 60)
+		;
+
+}
+
+void check_password_entered(uint8 *entered_pass) {
+
+	uint8 *saved_pass;
+	read_password_eeprom(&saved_pass);
+	matching = 0;
+	for (uint8 i = 0; i < 5; i++) {
+
+		if (entered_pass[i] == saved_pass[i]) {
+			if (i == 4) {
+				UART_sendByte(CONTROL_MC2_READY_UART);
+				UART_sendByte(PASSWORD_MATCH);
+				matching = 1;
+				g_wrongPasswordCounter = 0;
+			}
+
+			continue;
+		} else {
+			g_wrongPasswordCounter++;
+			UART_sendByte(CONTROL_MC2_READY_UART);
+			UART_sendByte(PASSWORD_UNMATCH);
+
+			if (g_wrongPasswordCounter == CHANGING_PASSWORD) {
+				Buzzer_Alarm();
+				matching = 1;
+			}
+
+			break;
+		}
+
+	}
+
+}

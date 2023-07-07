@@ -1,0 +1,334 @@
+/*
+ * main_MC1.c
+ *
+ *  Created on: Jul 1, 2023
+ *      Author: T.S
+ */
+
+#include "Timer1.h"
+#include <util/delay.h>
+#include <avr/io.h>
+#include "gpio.h"
+#include "uart.h"
+#include "keypad.h"
+#include "lcd.h"
+
+#define HMI_MC1_READY_UART		0x00
+#define CONTROL_MC2_READY_UART 	0xFF
+#define PASSWORD_MATCH		TRUE
+#define PASSWORD_UNMATCH	FALSE
+
+#define ENTER_KEY '='
+#define password_length 5
+
+Timer1_ConfigType g_timer1_config =
+		{ 0, 7813, CLK_PRESCALER_1024, COMPARE_MODE };
+uint8 g_ticks;
+void Timer_CallBackFunction(void) {
+	g_ticks++;
+}
+
+uint8 keypad_reading = -1;
+
+uint8 matching = 0;
+uint8 error_pass = 0;
+
+uint8 password[password_length + 2] = { 0 };
+uint8 pass_inc = 0;
+uint8 confirm_password[password_length + 2] = { 0 };
+uint8 pass_confirm_inc = 0;
+
+/*Function Prototype*/
+void createPassword();
+uint8 sendpassword();
+uint8 Enter_pass(void);
+void Door();
+
+/*Main Function*/
+
+int main(void) {
+
+	SREG |= (1 << 7);
+	UART_configType configPtr = { 9600, NO_Parity, One_Stop_Bit, Data_8_Bits };
+	UART_init(&configPtr);
+
+	LCD_init();
+	uint8 status;
+	uint8 state_pass;
+	uint8 receivebyte;
+	do {
+		createPassword();
+		status = sendpassword();
+	} while (status == 0);
+
+	while (1) {
+
+		LCD_clearScreen();
+		LCD_moveCursor(0, 0);
+		LCD_displayString("+ : Open Door");
+
+		LCD_moveCursor(1, 0);
+		LCD_displayString("- : Change Pass");
+
+		while (keypad_reading != '+' && keypad_reading != '-') {
+
+			keypad_reading = KEYPAD_getPressedKey();
+			_delay_ms(500); /* Press time */
+
+		}
+
+		receivebyte = UART_recieveByte();
+
+		LCD_clearScreen();
+		LCD_displayString("waitting +-");
+
+		/*	send entered password to the other mc by UART	*/
+		UART_sendByte(keypad_reading);
+
+		LCD_clearScreen();
+		LCD_displayString("waitting -+");
+
+		if (keypad_reading == '+') {
+
+			do {
+				state_pass = Enter_pass();
+			} while (state_pass == 0);
+			if (state_pass == 2)
+				continue;
+			Door();
+			keypad_reading = -1;
+			continue;
+		} else if (keypad_reading == '-') {
+
+			do {
+				state_pass = Enter_pass();
+			} while (state_pass == 0);
+			if (state_pass == 2)
+				continue;
+			createPassword();
+			status = sendpassword();
+			if (status == 0)
+				continue;
+		}
+
+	}
+
+	return 0;
+}
+
+/*Function Definition*/
+
+void createPassword() {
+
+	LCD_clearScreen();
+	LCD_displayString("Plz enter pass:");
+	LCD_moveCursor(1, 0);
+	pass_inc = 0;
+	while (pass_inc < password_length) {
+		/* wait for user to press on any key to proceed to next step*/
+
+		/*	get key pressed from keypad	*/
+		keypad_reading = KEYPAD_getPressedKey();
+		_delay_ms(500);
+		if (keypad_reading <= 9 && keypad_reading >= 0) {
+
+			LCD_displayCharacter('*');
+			//LCD_intgerToString(keypad_reading);
+
+			/*	password 1 storing in array	*/
+			password[pass_inc] = keypad_reading;
+			pass_inc++;
+			keypad_reading = -1;
+
+		}
+
+	}
+	password[5] = '#'; /*Assign the last character as '#'*/
+	password[6] = '\0'; /*Terminate string to be sent by UART*/
+
+	/* wait for user to press on the enter key to proceed to next step*/
+	while (KEYPAD_getPressedKey() != ENTER_KEY)
+		;
+
+	/*wrtite confirm pass*/
+	LCD_clearScreen();
+	LCD_displayString("Plz Re-enter the");
+	LCD_moveCursor(1, 0);
+	LCD_displayString("same pass:");
+	pass_confirm_inc = 0;
+	while (pass_confirm_inc < password_length) {
+		/*	get key pressed from keypad	*/
+		keypad_reading = KEYPAD_getPressedKey();
+		_delay_ms(500);
+		if (keypad_reading <= 9 && keypad_reading >= 0) {
+			/* show interaction the input	*/
+			LCD_displayCharacter('*');
+
+			/*	password storing in array	*/
+			confirm_password[pass_confirm_inc] = keypad_reading;
+			pass_confirm_inc++;
+		}
+
+	}
+
+	confirm_password[5] = '#'; /*Assign the last character as '#'*/
+	confirm_password[6] = '\0'; /*Terminate string to be sent by UART*/
+
+	/* wait for user to press on the enter key to proceed to next step*/
+	while (KEYPAD_getPressedKey() != ENTER_KEY)
+		;
+
+}
+
+uint8 sendpassword() {
+
+	uint8 receiveByte;
+
+	/* waiting for a ready signal from the control unit */
+
+	receiveByte = UART_recieveByte();
+
+	/*	send the password to the other mc by UART	*/
+	UART_sendString(password);
+
+	/* waiting for a ready signal from the control unit */
+
+	receiveByte = UART_recieveByte();
+
+	/*	send confirmation password to the other mc by UART	*/
+	UART_sendString(confirm_password);
+
+	/* waiting for a ready signal from the control unit */
+	LCD_clearScreen();
+	_delay_ms(300);
+
+	/* Send MC2_READY byte to MC1 to ask it to send the string */
+	UART_sendByte(HMI_MC1_READY_UART);
+
+	matching = UART_recieveByte();
+	_delay_ms(500);
+
+	/*	if two passwords don't match*/
+	if (matching == 0) {
+		/*	clear the screen and display not matching	*/
+		LCD_clearScreen();
+		LCD_displayString("Not Matching");
+
+		_delay_ms(500);
+
+		return 0;
+	}
+	/*	clear the screen and display not matching	*/
+	LCD_clearScreen();
+	LCD_displayString("Created Welcome");
+	_delay_ms(500);
+	return 1;
+
+}
+
+uint8 Enter_pass(void) {
+	/*debug*/
+	LCD_clearScreen();
+	LCD_displayString("Loading...");
+	_delay_ms(1000);
+	/*end debug*/
+
+	LCD_clearScreen();
+	LCD_displayString("Plz enter pass:");
+	LCD_moveCursor(1, 0);
+	pass_inc = 0;
+
+	while (pass_inc < password_length) {
+		/* wait for user to press on any key to proceed to next step*/
+
+		keypad_reading = KEYPAD_getPressedKey();
+
+		if (keypad_reading <= 9 && keypad_reading >= 0) {
+			/* show interaction the input	*/
+			LCD_displayCharacter('*');
+
+			/*	password 1 storing in array	*/
+			password[pass_inc] = keypad_reading;
+
+			pass_inc++;
+			//keypad_reading = -1;
+		}
+		_delay_ms(500);
+	}
+
+	password[5] = '#'; /*Assign the last character as '#'*/
+	password[6] = '\0'; /*Terminate string to be sent by UART*/
+
+	/* wait for user to press on the enter key to proceed to next step*/
+	while (KEYPAD_getPressedKey() != ENTER_KEY)
+		;
+
+	uint8 receiveByte;
+
+	/* waiting for a ready signal from the control unit */
+
+	receiveByte = UART_recieveByte();
+
+	/*	send entered password to the other mc by UART	*/
+	UART_sendString(password);
+
+	/* waiting for a ready signal from the control unit */
+	LCD_clearScreen();
+	_delay_ms(300);
+
+	/* Send MC2_READY byte to MC1 to ask it to send the string */
+	UART_sendByte(HMI_MC1_READY_UART);
+
+	matching = UART_recieveByte();
+	_delay_ms(500);
+
+	/*	if two passwords don't match*/
+
+	if (matching == 0) {
+		error_pass++;
+		if (error_pass == 3) {
+			/*Buzzer*/
+			Timer1_init(&g_timer1_config);
+			Timer1_setCallBack(&Timer_CallBackFunction);
+			LCD_clearScreen();
+			LCD_displayString("Error in pass");
+			g_ticks = 0;
+			while (g_ticks < 60)
+				;
+			/*Buzzer work in other mc*/
+			error_pass = 0;
+			return 2;
+
+		}
+		return 0;
+
+	} else {
+
+		return 1;
+	}
+}
+
+void Door() {
+	Timer1_init(&g_timer1_config);
+	Timer1_setCallBack(&Timer_CallBackFunction);
+	g_ticks = 0;
+	LCD_clearScreen();
+	LCD_displayString("Door Opening");
+	while (g_ticks < 15)
+		;
+
+	g_ticks = 0;
+	LCD_clearScreen();
+	LCD_displayString("Opened Door");
+	while (g_ticks < 3)
+		;
+
+	g_ticks = 0;
+	LCD_clearScreen();
+	LCD_displayString("Door Closing");
+	while (g_ticks < 15)
+		;
+
+	Timer1_deInit();
+
+}

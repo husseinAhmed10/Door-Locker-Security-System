@@ -1,0 +1,46 @@
+/*
+ * buzzer.h
+ *
+ *  Created on: May 23, 2023
+ *      Author: T.S
+ */
+
+#ifndef BUZZER_H_
+#define BUZZER_H_
+
+/*Data Types and static configuration*/
+#include "std_types.h"
+
+#define buzzer_port PORTB_ID
+#define buzzer_pin PIN2_ID
+
+/*Function Definition*/
+
+/*a. void Buzzer_init()
+● Description
+⮚ Setup the direction for the buzzer pin as output pin through the
+GPIO driver.
+⮚ Turn off the buzzer through the GPIO.
+● Inputs: None
+● Return: None*/
+
+void Buzzer_init();
+
+/*b. void Buzzer_on(void)
+● Description
+⮚ Function to enable the Buzzer through the GPIO.
+● Inputs: None
+● Return: None*/
+
+void Buzzer_on(void);
+
+/*c. void Buzzer_off(void)
+● Description
+⮚ Function to disable the Buzzer through the GPIO.
+● Inputs: None
+● Return: No*/
+
+void Buzzer_off(void);
+
+
+#endif /* BUZZER_H_ */
