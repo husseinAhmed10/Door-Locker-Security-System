@@ -21,3 +21,6 @@ Display:
 - Actuators: DC motor Used to drive the DC motor to simulate the unlocking of the door. It includes functions for controlling the direction and speed of the motor.
 -Timing:Timer Used to generate periodic interrupts to execute tasks at specific intervals, such as incrementing a global variable to keep track of time since the system was started.
 
+
+**Demo**
+![](https://github.com/husseinAhmed10/Simple-Calculator/blob/main/Project.gif)
